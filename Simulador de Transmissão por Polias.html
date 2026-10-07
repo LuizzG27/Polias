@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador de Transmissão por Polias</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5ebd0;--pn:#fdf6e3;--ln:#d9c9a0;--tx:#14264a;--mut:#5b6b8a;--bl:#1d4ed8;color-scheme:light}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+.wrap{max-width:1100px;margin:0 auto;padding:22px 16px 40px}
+h1{margin:0;font-size:1.6rem}
+.sub{margin:4px 0 18px;color:var(--mut)}
+.main{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:18px;align-items:start}
+canvas{display:block;width:100%;height:auto;border-radius:6px;border:2px solid #0d3b8c;background-color:#0d3b8c;background-image:linear-gradient(rgba(244,228,184,.13) 1px,transparent 1px),linear-gradient(90deg,rgba(244,228,184,.13) 1px,transparent 1px);background-size:20px 20px}
+.leg{font-size:.82rem;color:var(--mut);margin:8px 2px 14px}
+.leg b{color:var(--bl)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.pc{background:var(--pn);border:1px solid var(--ln);border-top:3px solid var(--bl);border-radius:6px;padding:10px 12px}
+.pc h4{margin:0 0 6px;font-size:.95rem}
+.pc div{display:flex;justify-content:space-between;font-size:.88rem;padding:2px 0}
+.pc span{color:var(--mut)}
+.pc b{font-family:"DM Mono",ui-monospace,Consolas,monospace;font-weight:600}
+.panel{background:var(--pn);border:1px solid var(--ln);border-radius:8px;padding:16px}
+.panel h3{margin:16px 0 8px;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--bl)}
+.panel h3:first-child{margin-top:0}
+.seg{display:flex;flex-direction:column;gap:6px}
+.seg button{text-align:left;background:var(--pn);border:1px solid var(--ln);border-radius:6px;padding:9px 12px;color:var(--tx);cursor:pointer;font-size:.9rem}
+.seg button.on{background:var(--bl);border-color:var(--bl);color:var(--pn)}
+.row{margin:8px 0}
+.row label{display:flex;justify-content:space-between;font-size:.88rem}
+.row b{font-family:"DM Mono",ui-monospace,Consolas,monospace}
+input[type=range]{width:100%;accent-color:var(--bl)}
+.btn{width:100%;margin-top:8px;padding:9px;border:1px solid var(--bl);background:var(--pn);color:var(--bl);border-radius:6px;font-weight:600;cursor:pointer}
+.rel{font-family:"DM Mono",ui-monospace,Consolas,monospace;font-size:.8rem;background:#e9eefb;border-left:3px solid var(--bl);padding:8px 10px;margin:6px 0;overflow-x:auto;white-space:nowrap}
+.rel i{display:block;font-family:system-ui,sans-serif;font-style:normal;color:var(--mut);font-size:.75rem;white-space:normal}
+@media(max-width:860px){.main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Simulador de Transmissão por Polias</h1>
+<p class="sub">Pontos em contato (ou na correia) têm a mesma velocidade linear: ω<sub>A</sub>·R<sub>A</sub> = ω<sub>B</sub>·R<sub>B</sub>. Mude os raios e veja o que acontece.</p>
+<div class="main">
+<div>
+<canvas id="cv" width="760" height="430"></canvas>
+<p class="leg"><b>Seta azul</b> = velocidade linear v da borda · <b>seta curva</b> = sentido de giro (A gira no sentido horário).</p>
+<div class="cards" id="cards"></div>
+</div>
+<div class="panel">
+<h3>Tipo de ligação</h3>
+<div class="seg" id="lnk"><button data-v="c" class="on">Contato (engrenagens)</button><button data-v="b">Correia ou corrente</button></div>
+<h3>Raios e velocidade</h3>
+<div class="row"><label>Raio R<sub>A</sub> <b id="ra_v"></b></label><input type="range" id="ra" min="2" max="30" step="0.5" value="10"></div>
+<div class="row"><label>Raio R<sub>B</sub> <b id="rb_v"></b></label><input type="range" id="rb" min="2" max="30" step="0.5" value="5"></div>
+<div class="row"><label>ω<sub>A</sub> (motor) <b id="wa_v"></b></label><input type="range" id="wa" min="0.5" max="10" step="0.1" value="2"></div>
+<h3>Simulação</h3>
+<div class="row"><label>Velocidade da animação <b id="sp_v"></b></label><input type="range" id="sp" min="0.1" max="2" step="0.1" value="1"></div>
+<button class="btn" id="pp">⏸ Pausar</button>
+<h3>Cálculo</h3>
+<div id="rel"></div>
+</div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id),TAU=Math.PI*2,S={link:'c',run:true},CR='#f4e4b8',VB='#7fe0ff';
+const F=x=>parseFloat(x.toPrecision(4)).toString().replace('.',',');
+let th=0,last=performance.now();
+$('lnk').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+ $('lnk').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');S.link=b.dataset.v;update()});
+document.querySelectorAll('input[type=range]').forEach(i=>i.oninput=update);
+$('pp').onclick=()=>{S.run=!S.run;$('pp').textContent=S.run?'⏸ Pausar':'▶ Continuar'};
+
+function model(){
+ const RA=+$('ra').value,RB=+$('rb').value,wA=+$('wa').value,b=S.link==='b';
+ const P=[{n:'A',R:RA,s:1,w:wA},{n:'B',R:RB,s:b?1:-1,w:wA*RA/RB}];
+ P.forEach(p=>{p.f=p.w/TAU;p.v=p.w*p.R});
+ return P;
+}
+function update(){
+ const [A,B]=model(),b=S.link==='b';
+ [['ra','cm'],['rb','cm'],['wa','rad/s']].forEach(([i,u])=>$(i+'_v').textContent=F(+$(i).value)+' '+u);
+ $('sp_v').textContent=F(+$('sp').value)+'×';
+ $('cards').innerHTML=[A,B].map(p=>`<div class="pc"><h4>Polia ${p.n} · R = ${F(p.R)} cm</h4><div><span>ω</span><b>${F(p.w)} rad/s</b></div><div><span>f</span><b>${F(p.f)} Hz</b></div><div><span>f</span><b>${F(p.f*60)} rpm</b></div><div><span>v (borda)</span><b>${F(p.v)} cm/s</b></div><div><span>Sentido</span><b>${p.s>0?'horário':'anti-horário'}</b></div></div>`).join('');
+ const r=(t,h)=>`<div class="rel">${h}<i>${t}</i></div>`;
+ $('rel').innerHTML=r('Velocidade linear da borda de A','v<sub>A</sub> = ω<sub>A</sub>·R<sub>A</sub> = '+F(A.w)+'·'+F(A.R)+' = '+F(A.v)+' cm/s')
+ +r(b?'Mesma correia: mesma v':'Mesmo ponto de contato: mesma v','v<sub>B</sub> = v<sub>A</sub>')
+ +r('Velocidade angular de B','ω<sub>B</sub> = v/R<sub>B</sub> = '+F(A.v)+'/'+F(B.R)+' = '+F(B.w)+' rad/s')
+ +r('Quanto menor o raio, maior a velocidade angular','ω<sub>B</sub>/ω<sub>A</sub> = R<sub>A</sub>/R<sub>B</sub> = '+F(A.R/B.R));
+}
+function arrow(c,x0,y0,x1,y1,col){
+ const a=Math.atan2(y1-y0,x1-x0);c.strokeStyle=c.fillStyle=col;c.lineWidth=3;c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
+ c.beginPath();c.moveTo(x1,y1);c.lineTo(x1-10*Math.cos(a-.4),y1-10*Math.sin(a-.4));c.lineTo(x1-10*Math.cos(a+.4),y1-10*Math.sin(a+.4));c.fill();
+}
+function draw(){
+ const c=$('cv').getContext('2d'),P=model(),b=S.link==='b',[A,B]=P;
+ const d=(A.R+B.R)*(b?1.35:1),width=d+A.R+B.R,k=Math.min(680/width,140/Math.max(A.R,B.R)),x0=(760-width*k)/2+A.R*k;
+ P.forEach(p=>{p.r=p.R*k;p.y=225});A.x=x0;B.x=x0+d*k;
+ c.clearRect(0,0,760,430);
+ if(b){
+  const dd=B.x-A.x,sn=(A.r-B.r)/dd,cs=Math.sqrt(1-sn*sn),sh=th*A.r;
+  c.lineWidth=4;c.strokeStyle=CR;c.setLineDash([12,8]);
+  c.lineDashOffset=-sh;c.beginPath();c.moveTo(A.x+A.r*sn,A.y-A.r*cs);c.lineTo(B.x+B.r*sn,B.y-B.r*cs);c.stroke();
+  c.lineDashOffset=sh;c.beginPath();c.moveTo(A.x+A.r*sn,A.y+A.r*cs);c.lineTo(B.x+B.r*sn,B.y+B.r*cs);c.stroke();
+  c.setLineDash([]);
+ }
+ P.forEach(p=>{
+  const ang=p===A?th:p.s*th*A.R/B.R;
+  c.strokeStyle=CR;c.lineWidth=2.5;c.fillStyle='rgba(244,228,184,.1)';
+  c.beginPath();c.arc(p.x,p.y,p.r,0,TAU);c.fill();c.stroke();
+  if(b){c.strokeStyle='rgba(244,228,184,.45)';c.lineWidth=2;c.beginPath();c.arc(p.x,p.y,p.r-7,0,TAU);c.stroke()}
+  c.strokeStyle='rgba(244,228,184,.8)';c.lineWidth=2;
+  for(let q=0;q<4;q++){const an=ang+q*Math.PI/2;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+(p.r-8)*Math.cos(an),p.y+(p.r-8)*Math.sin(an));c.stroke()}
+  c.fillStyle=CR;c.beginPath();c.arc(p.x+(p.r-14)*Math.cos(ang),p.y+(p.r-14)*Math.sin(ang),4.5,0,TAU);c.fill();
+  c.fillStyle='#0d3b8c';c.beginPath();c.arc(p.x,p.y,15,0,TAU);c.fill();c.strokeStyle=CR;c.stroke();
+  c.fillStyle=CR;c.font='bold 15px Nunito,system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(p.n,p.x,p.y+1);
+  const ar=p.r*.58,a0=p.s>0?-2.4:-.74,a1=p.s>0?-.74:-2.4;
+  c.strokeStyle=CR;c.lineWidth=2;c.beginPath();c.arc(p.x,p.y,ar,a0,a1,p.s<0);c.stroke();
+  const ex=p.x+ar*Math.cos(a1),ey=p.y+ar*Math.sin(a1),tx=-Math.sin(a1)*p.s,ty=Math.cos(a1)*p.s,nx=-ty,ny=tx;
+  c.fillStyle=CR;c.beginPath();c.moveTo(ex+tx*9,ey+ty*9);c.lineTo(ex+nx*5,ey+ny*5);c.lineTo(ex-nx*5,ey-ny*5);c.fill();
+ });
+ const L=60;
+ P.forEach(p=>{
+  const y=p.y-p.r-18;arrow(c,p.x-p.s*L/2,y,p.x+p.s*L/2,y,VB);
+  c.fillStyle=VB;c.font='14px Nunito,system-ui,sans-serif';c.textAlign='center';c.fillText('v'+p.n,p.x,y-12);
+ });
+}
+function frame(t){const dt=Math.min((t-last)/1000,.05);last=t;if(S.run)th+=+$('wa').value*dt*+$('sp').value;draw();requestAnimationFrame(frame)}
+update();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
