@@ -37,6 +37,9 @@ input[type=range]{width:100%;accent-color:var(--bl)}
 .btn{width:100%;margin-top:8px;padding:9px;border:1px solid var(--bl);background:var(--pn);color:var(--bl);border-radius:6px;font-weight:600;cursor:pointer}
 .rel{font-family:"DM Mono",ui-monospace,Consolas,monospace;font-size:.8rem;background:#e9eefb;border-left:3px solid var(--bl);padding:8px 10px;margin:6px 0;overflow-x:auto;white-space:nowrap}
 .rel i{display:block;font-family:system-ui,sans-serif;font-style:normal;color:var(--mut);font-size:.75rem;white-space:normal}
+.num{width:92px;padding:4px 6px;border:1px solid var(--ln);border-radius:4px;background:var(--pn);color:var(--tx);font:inherit;font-size:.88rem;text-align:right}
+select.num{width:auto;text-align:left}
+.note{font-size:.78rem;color:var(--mut);margin:4px 0 0}
 @media(max-width:860px){.main{grid-template-columns:1fr}}
 </style>
 </head>
@@ -54,11 +57,12 @@ input[type=range]{width:100%;accent-color:var(--bl)}
 <h3>Tipo de ligação</h3>
 <div class="seg" id="lnk"><button data-v="c" class="on">Contato (engrenagens)</button><button data-v="b">Correia ou corrente</button></div>
 <h3>Raios e velocidade</h3>
-<div class="row"><label>Raio R<sub>A</sub> <b id="ra_v"></b></label><input type="range" id="ra" min="2" max="30" step="0.5" value="10"></div>
-<div class="row"><label>Raio R<sub>B</sub> <b id="rb_v"></b></label><input type="range" id="rb" min="2" max="30" step="0.5" value="5"></div>
-<div class="row"><label>ω<sub>A</sub> (motor) <b id="wa_v"></b></label><input type="range" id="wa" min="0.5" max="10" step="0.1" value="2"></div>
+<div class="row"><label>Raio R<sub>A</sub> <b id="ra_v"></b></label><input type="range" id="ra" min="5" max="100" step="0.5" value="10"></div>
+<div class="row"><label>Raio R<sub>B</sub> <b id="rb_v"></b></label><input type="range" id="rb" min="5" max="100" step="0.5" value="5"></div>
+<div class="row"><label>Velocidade de A (motor)<span><input id="wn" class="num" inputmode="decimal" value="2"> <select id="wu" class="num"><option value="r">rad/s</option><option value="m">rpm</option><option value="h">Hz</option></select></span></label><input type="range" id="wa" min="0.1" max="200" step="0.1" value="2"></div>
 <h3>Simulação</h3>
-<div class="row"><label>Velocidade da animação <b id="sp_v"></b></label><input type="range" id="sp" min="0.1" max="2" step="0.1" value="1"></div>
+<div class="row"><label>Velocidade da animação <b id="sp_v"></b></label><input type="range" id="sp" min="0.01" max="2" step="0.01" value="1"></div>
+<p class="note">Com velocidade alta, reduza a animação para enxergar o giro. Trocar a unidade não altera a velocidade, só como ela é exibida.</p>
 <button class="btn" id="pp">⏸ Pausar</button>
 <h3>Cálculo</h3>
 <div id="rel"></div>
@@ -68,21 +72,28 @@ input[type=range]{width:100%;accent-color:var(--bl)}
 <script>
 const $=id=>document.getElementById(id),TAU=Math.PI*2,S={link:'c',run:true},CR='#f4e4b8',VB='#7fe0ff';
 const F=x=>parseFloat(x.toPrecision(4)).toString().replace('.',',');
-let th=0,last=performance.now();
+let th=0,last=performance.now(),W=2,U='r';
 $('lnk').querySelectorAll('button').forEach(b=>b.onclick=()=>{
  $('lnk').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');S.link=b.dataset.v;update()});
 document.querySelectorAll('input[type=range]').forEach(i=>i.oninput=update);
 $('pp').onclick=()=>{S.run=!S.run;$('pp').textContent=S.run?'⏸ Pausar':'▶ Continuar'};
 
+const UC={r:{min:.1,max:200,step:.1},m:{min:1,max:1910,step:1},h:{min:.02,max:31.9,step:.1}};
+const toU=(w,u)=>u==='m'?w*60/TAU:u==='h'?w/TAU:w,fromU=(x,u)=>u==='m'?x*TAU/60:u==='h'?x*TAU:x;
+function setUnit(u){U=u;const c=UC[u],s=$('wa');s.min=c.min;s.max=c.max;s.step=c.step;s.value=toU(W,u);$('wn').value=F(toU(W,u))}
+$('wu').onchange=e=>setUnit(e.target.value);
+$('wa').oninput=()=>{W=fromU(+$('wa').value,U);$('wn').value=F(+$('wa').value);update()};
+$('wn').oninput=()=>{const x=parseFloat($('wn').value.replace(',','.'));if(x>0){W=fromU(x,U);$('wa').value=x;update()}};
+
 function model(){
- const RA=+$('ra').value,RB=+$('rb').value,wA=+$('wa').value,b=S.link==='b';
+ const RA=+$('ra').value,RB=+$('rb').value,wA=W,b=S.link==='b';
  const P=[{n:'A',R:RA,s:1,w:wA},{n:'B',R:RB,s:b?1:-1,w:wA*RA/RB}];
  P.forEach(p=>{p.f=p.w/TAU;p.v=p.w*p.R});
  return P;
 }
 function update(){
  const [A,B]=model(),b=S.link==='b';
- [['ra','cm'],['rb','cm'],['wa','rad/s']].forEach(([i,u])=>$(i+'_v').textContent=F(+$(i).value)+' '+u);
+ [['ra','cm'],['rb','cm']].forEach(([i,u])=>$(i+'_v').textContent=F(+$(i).value)+' '+u);
  $('sp_v').textContent=F(+$('sp').value)+'×';
  $('cards').innerHTML=[A,B].map(p=>`<div class="pc"><h4>Polia ${p.n} · R = ${F(p.R)} cm</h4><div><span>ω</span><b>${F(p.w)} rad/s</b></div><div><span>f</span><b>${F(p.f)} Hz</b></div><div><span>f</span><b>${F(p.f*60)} rpm</b></div><div><span>v (borda)</span><b>${F(p.v)} cm/s</b></div><div><span>Sentido</span><b>${p.s>0?'horário':'anti-horário'}</b></div></div>`).join('');
  const r=(t,h)=>`<div class="rel">${h}<i>${t}</i></div>`;
@@ -108,15 +119,15 @@ function draw(){
   c.setLineDash([]);
  }
  P.forEach(p=>{
-  const ang=p===A?th:p.s*th*A.R/B.R;
+  const ang=p===A?th:p.s*th*A.R/B.R,hub=Math.min(15,p.r*.4),mr=Math.max(p.r-14,p.r*.6),sl=Math.max(p.r-8,hub);
   c.strokeStyle=CR;c.lineWidth=2.5;c.fillStyle='rgba(244,228,184,.1)';
   c.beginPath();c.arc(p.x,p.y,p.r,0,TAU);c.fill();c.stroke();
-  if(b){c.strokeStyle='rgba(244,228,184,.45)';c.lineWidth=2;c.beginPath();c.arc(p.x,p.y,p.r-7,0,TAU);c.stroke()}
+  if(b){c.strokeStyle='rgba(244,228,184,.45)';c.lineWidth=2;c.beginPath();c.arc(p.x,p.y,Math.max(p.r-7,p.r*.7),0,TAU);c.stroke()}
   c.strokeStyle='rgba(244,228,184,.8)';c.lineWidth=2;
-  for(let q=0;q<4;q++){const an=ang+q*Math.PI/2;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+(p.r-8)*Math.cos(an),p.y+(p.r-8)*Math.sin(an));c.stroke()}
-  c.fillStyle=CR;c.beginPath();c.arc(p.x+(p.r-14)*Math.cos(ang),p.y+(p.r-14)*Math.sin(ang),4.5,0,TAU);c.fill();
-  c.fillStyle='#0d3b8c';c.beginPath();c.arc(p.x,p.y,15,0,TAU);c.fill();c.strokeStyle=CR;c.stroke();
-  c.fillStyle=CR;c.font='bold 15px Nunito,system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(p.n,p.x,p.y+1);
+  for(let q=0;q<4;q++){const an=ang+q*Math.PI/2;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+sl*Math.cos(an),p.y+sl*Math.sin(an));c.stroke()}
+  c.fillStyle=CR;c.beginPath();c.arc(p.x+mr*Math.cos(ang),p.y+mr*Math.sin(ang),Math.min(4.5,p.r*.15),0,TAU);c.fill();
+  c.fillStyle='#0d3b8c';c.beginPath();c.arc(p.x,p.y,hub,0,TAU);c.fill();c.strokeStyle=CR;c.stroke();
+  c.fillStyle=CR;c.font=`bold ${Math.max(8,Math.min(15,hub))}px Nunito,system-ui,sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText(p.n,p.x,p.y+1);
   const ar=p.r*.58,a0=p.s>0?-2.4:-.74,a1=p.s>0?-.74:-2.4;
   c.strokeStyle=CR;c.lineWidth=2;c.beginPath();c.arc(p.x,p.y,ar,a0,a1,p.s<0);c.stroke();
   const ex=p.x+ar*Math.cos(a1),ey=p.y+ar*Math.sin(a1),tx=-Math.sin(a1)*p.s,ty=Math.cos(a1)*p.s,nx=-ty,ny=tx;
@@ -128,8 +139,8 @@ function draw(){
   c.fillStyle=VB;c.font='14px Nunito,system-ui,sans-serif';c.textAlign='center';c.fillText('v'+p.n,p.x,y-12);
  });
 }
-function frame(t){const dt=Math.min((t-last)/1000,.05);last=t;if(S.run)th+=+$('wa').value*dt*+$('sp').value;draw();requestAnimationFrame(frame)}
-update();requestAnimationFrame(frame);
+function frame(t){const dt=Math.min((t-last)/1000,.05);last=t;if(S.run)th+=W*dt*+$('sp').value;draw();requestAnimationFrame(frame)}
+setUnit('r');update();requestAnimationFrame(frame);
 </script>
 </body>
 </html>
